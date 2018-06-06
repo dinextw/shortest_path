@@ -4,19 +4,19 @@
 """
 import bisect
 import normgrid
-import my_util
 
+#是否有private class的可能（在下面新增的時候？）
 class GeoSpeed(object):
     """ Look up the speed in velocity modeel
     Public Methods:
-        renew_lon: rewrite the lon value
-        renew_lat: rewrite the lat value
-        renew_dep: rewrite the dep value
-        renew_speed: rewrite the speed value
-        display_lon: display the lon value
-        display_lat: display the lat value
-        display_dep: display the dep value
-        display_speed: display the speed value
+        set_lon: rewrite the lon value
+        set_lat: rewrite the lat value
+        set_dep: rewrite the dep value
+        set_speed: rewrite the speed value
+        get_lon: get the lon value
+        get_lat: get the lat value
+        get_dep: get the dep value
+        get_speed: get the speed value
     """
     _lon = None
     _lat = None
@@ -27,8 +27,9 @@ class GeoSpeed(object):
         self._lat = lat
         self._dep = dep
         self._speed = speed
-    def renew_lon(self, lon):
-        """ Renew the value of lon
+    #renew -> set
+    def set_lon(self, lon):
+        """ set the value of lon
         Args:
             lon: longitude
         Returns:
@@ -39,8 +40,8 @@ class GeoSpeed(object):
             print("Out of range")
         else:
             self._lon = lon
-    def renew_lat(self, lat):
-        """ Renew the value of lat
+    def set_lat(self, lat):
+        """ set the value of lat
         Args:
             lat: latitude
         Returns:
@@ -51,8 +52,8 @@ class GeoSpeed(object):
             print("Out of range")
         else:
             self._lat = lat
-    def renew_dep(self, dep):
-        """ Renew the value of dep
+    def set_dep(self, dep):
+        """ set the value of dep
         Args:
             dep: depth
         Returns:
@@ -63,8 +64,8 @@ class GeoSpeed(object):
             print("Out of range")
         else:
             self._dep = dep
-    def renew_speed(self, speed):
-        """ Renew the value of speed
+    def set_speed(self, speed):
+        """ set the value of speed
         Args:
             speed: velocity
         Returns:
@@ -75,7 +76,8 @@ class GeoSpeed(object):
             print("Out of range")
         else:
             self._speed = speed
-    def display_lon(self):
+    #display -> get(get ~= print)
+    def get_lon(self):
         """ Return the value of lon
         Args:
         Returns:
@@ -84,7 +86,7 @@ class GeoSpeed(object):
             Native exceptions.
         """
         return self._lon
-    def display_lat(self):
+    def get_lat(self):
         """ Return the value of lat
         Args:
         Returns:
@@ -93,7 +95,7 @@ class GeoSpeed(object):
             Native exceptions.
         """
         return self._lat
-    def display_dep(self):
+    def get_dep(self):
         """ Return the value of dep
         Args:
         Returns:
@@ -102,7 +104,7 @@ class GeoSpeed(object):
             Native exceptions.
         """
         return self._dep
-    def display_speed(self):
+    def get_speed(self):
         """ Return the value of speed
         Args:
         Returns:
@@ -178,6 +180,7 @@ class GeoModel(object):
                                 self._geo_speeds[lon_idx][lat_idx].append(geo_speed)
 
     def _nearest_idx(self, loc):
+        #這個真是正確的解嗎？
         lon_idx = bisect.bisect_right(self._scales[0], loc[0]) - 1
         lat_idx = bisect.bisect_right(self._scales[1], loc[1]) - 1
         dep_idx = bisect.bisect_right(self._scales[2], loc[2]) - 1
@@ -192,57 +195,32 @@ class GeoModel(object):
         Raises:
             Native exceptions.
         """
-        loc_norm = self._norm.get_norm_loc(loc)
-        near_idx = self._nearest_idx(loc_norm)
-        dist_lon = my_util.haversine(self._scales[0][near_idx[0]]
-                                     , self._scales[1][near_idx[1]]
-                                     , self._scales[0][near_idx[0]+1]
-                                     , self._scales[1][near_idx[1]]
-                                     , 6371.0 - self._scales[2][near_idx[2]])
-        dist_lat = my_util.haversine(self._scales[0][near_idx[0]]
-                                     , self._scales[1][near_idx[1]]
-                                     , self._scales[0][near_idx[0]]
-                                     , self._scales[1][near_idx[1]+1]
-                                     , 6371.0 - self._scales[2][near_idx[2]])
+        #製造Graph的時候normalized就好 這邊不需要
+        near_idx = self._nearest_idx(loc)
+        #你只要算比例就好 不需要算距離...
+        dist_lon = self._scales[0][near_idx[0]+1] - self._scales[0][near_idx[0]]
+        dist_lat = self._scales[1][near_idx[1]+1] - self._scales[1][near_idx[1]]
         dist_dep = self._scales[2][near_idx[2]+1] - self._scales[2][near_idx[2]]
-
         velocity = 0
         incs = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 0],
                 [1, 0, 1], [0, 1, 1], [1, 1, 1]]
         for inc in incs:
             if inc[0] == 1:
-                diff_lon = my_util.haversine(loc_norm[0]
-                                             , loc_norm[1]
-                                             , self._scales[0][near_idx[0]]
-                                             , loc_norm[1]
-                                             , 6371.0 - self._scales[2][near_idx[2]])
+                diff_lon = abs(self._scales[0][near_idx[0]] - loc[0])
             else:
-                diff_lon = my_util.haversine(loc_norm[0]
-                                             , loc_norm[1]
-                                             , self._scales[0][near_idx[0]+1]
-                                             , loc_norm[1]
-                                             , 6371.0 - self._scales[2][near_idx[2]])
+                diff_lon = abs(loc[0] - self._scales[0][near_idx[0]+1])
             if inc[1] == 1:
-                diff_lat = my_util.haversine(loc_norm[0]
-                                             , loc_norm[1]
-                                             , loc_norm[0]
-                                             , self._scales[1][near_idx[1]]
-                                             , 6371.0 - self._scales[2][near_idx[2]])
+                diff_lat = abs(self._scales[1][near_idx[1]] - loc[1])
             else:
-                diff_lat = my_util.haversine(loc_norm[0]
-                                             , loc_norm[1]
-                                             , loc_norm[0]
-                                             , self._scales[1][near_idx[1]+1]
-                                             , 6371.0 - self._scales[2][near_idx[2]])
+                diff_lat = abs(loc[1] - self._scales[1][near_idx[1]+1])
             if inc[2] == 1:
-                diff_dep = abs(self._scales[2][near_idx[2]] - loc_norm[2])
+                diff_dep = abs(self._scales[2][near_idx[2]] - loc[2])
             else:
-                diff_dep = abs(self._scales[2][near_idx[2]+1] - loc_norm[2])
-
+                diff_dep = abs(loc[2] - self._scales[2][near_idx[2]+1])
             velocity = (velocity
                         + (self._geo_speeds
                            [near_idx[0]+inc[0]][near_idx[1]+inc[1]][near_idx[2]+inc[2]]
-                           .display_speed())
+                           .get_speed())
                         * diff_lon * diff_lat * diff_dep
                         / (dist_lon * dist_lat * dist_dep))
 
@@ -252,7 +230,32 @@ def main():
     """ unit test
     """
     geo_model = GeoModel()
-    print(geo_model.get_speed([122.04, 23.46, 20]))
+    loc = [122.04, 23.46, 20]
+    print("The location is ", loc, ", and the velocity is 6.45")
+    print("The computed velocity is ", geo_model.get_speed(loc))
 
+    #邊界的 格子點上的也來測一下
+    test_coors = []
+    test_data = './_test/Path.csv'
+    test_out = './_test/path_speed.csv'
+    with open(test_data, 'r') as in_file:
+        for line in in_file:
+            coor = [float(elem.strip()) for elem in line.split(',')
+                    if elem.strip()]
+            test_coors.append(coor)
+
+    with open(test_out, 'w') as out_file:
+        msg = 'Index, LON, LAT, DEP, Bending, Dijk, DIFF, DIFF%'
+        print(msg)
+        out_file.write('%s\n' % msg)
+
+        for idx, coor in enumerate(test_coors):
+            speed = geo_model.get_speed([coor[0], coor[1], coor[2]])
+            diff = speed - coor[3]
+            msg = ('%d, %f, %f, %f, %f, %f, %f, %f%%'
+                   % (idx, coor[0], coor[1], coor[2], coor[3]
+                      , speed, diff, diff * 100 / coor[3]))
+            print(msg)
+            out_file.write('%s\n' % msg)
 if __name__ == '__main__':
     main()
