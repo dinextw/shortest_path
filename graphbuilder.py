@@ -43,13 +43,60 @@ class Edge(object):
 class GraphBuilder(object):
     """ Build the edge of the graph
     """
-    def __init__(self, setting):
+    def __init__(self):
         self._norm = normgrid.NormGrid()
         self._geo = geomodel.GeoModel()
-        self._setting = setting
-        self._grid_gap = [0.01, 0.01, 1]
         self._extra_range = [0.02, 0.02, 20]
-        self._edge = []
+        self._idx_loc_min = None
+        self._idx_loc_lonmax = None
+        self._idx_loc_lonlatmax = None
+        self._idx_loc_max = None
+    def _set_boundary(self, sta_loc, sou_loc, stage):
+        """
+        """
+        num_lon = 360 * self._norm.get_div() / self._norm.get_grid_gap(stage)[0]
+        num_lat = 180 * self._norm.get_div() / self._norm.get_grid_gap(stage)[1]
+
+        loc_min = []
+        loc_max = []
+        for idx in range(3):
+            loc_min.append(min(sta_loc[idx], sou_loc[idx]))
+            loc_max.append(max(sta_loc[idx], sou_loc[idx]))
+
+        self._idx_loc_min = int(self._norm.get_norm_index(loc_min, stage)
+                                - self._extra_range[0]/self._norm.get_grid_gap(stage)[0]
+                                - self._extra_range[1]/self._norm.get_grid_gap(stage)[1]*num_lon)
+        self._idx_loc_lonmax = int(self._norm.get_norm_index([loc_max[0], loc_min[1]
+                                                              , loc_min[2]], stage)
+                                   + self._extra_range[0]/self._norm.get_grid_gap(stage)[0]
+                                   - self._extra_range[1]/self._norm.get_grid_gap(stage)[1]*num_lon)
+        self._idx_loc_lonlatmax = int(self._norm.get_norm_index([loc_max[0], loc_max[1]
+                                                                 , loc_min[2]], stage)
+                                      +self._extra_range[0]/self._norm.get_grid_gap(stage)[0]
+                                      +(self._extra_range[1]/self._norm.get_grid_gap(stage)[1]
+                                        *num_lon))
+        self._idx_loc_max = int(self._norm.get_norm_index(loc_max, stage)
+                                + self._extra_range[0]/self._norm.get_grid_gap(stage)[0]
+                                + self._extra_range[1]/self._norm.get_grid_gap(stage)[1]*num_lon
+                                + self._extra_range[2]/self._norm.get_grid_gap(stage)[2]
+                                * num_lon * num_lat)
+
+    def _is_in_boundary(self, idx_loc, num_lon, num_lat):
+        """
+        """
+
+        if idx_loc < self._idx_loc_min or idx_loc > self._idx_loc_max:
+            return False
+        elif (idx_loc % (num_lon * num_lat) < self._idx_loc_min
+              or idx_loc % (num_lon * num_lat) > self._idx_loc_lonlatmax):
+            return False
+        elif ((idx_loc % (num_lon * num_lat)) % num_lon < self._idx_loc_min % num_lon
+              or (idx_loc % (num_lon * num_lat))
+              % num_lon > self._idx_loc_lonmax % num_lon):
+            return False
+
+        return True
+
     def build_graph(self, sta_loc, sou_loc, stage):
         """ Build the whole graph
         Args:
@@ -61,57 +108,61 @@ class GraphBuilder(object):
         Raises:
             Native exceptions.
         """
-        sta_loc_norm = self._norm.get_norm_loc(sta_loc)
-        sou_loc_norm = self._norm.get_norm_loc(sou_loc)
 
-        incs = [[1, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 0]
-                , [1, 0, 1], [0, 1, 1], [1, 1, 1]]
+        num_lon = 360 * self._norm.get_div() / self._norm.get_grid_gap(stage)[0]
+        num_lat = 180 * self._norm.get_div() / self._norm.get_grid_gap(stage)[1]
+
+        edge = []
+        self._set_boundary(sta_loc, sou_loc, stage)
         if stage == 1:
-            incs_stage1 = []
+            incs = [1, num_lon, num_lon * num_lat]
 
-            for inc in incs:
-                incs_elem = []
-                for idx in range(3):
-                    incs_elem.append(inc[idx] * self._grid_gap[idx])
-                incs_stage1.append(incs_elem)
+        elif stage == 2:
+            incs = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 0]
+                    , [1, 0, 1], [0, 1, 1], [1, 1, 1]]
+        else:
+            print("Error in stage selection at building graph")
 
-            loc_bound = []
-            for idx in range(3):
-                if sta_loc_norm[idx] > sou_loc_norm[idx]:
-                    loc_bound.append([sou_loc_norm[idx] - self._extra_range[idx]
-                                      , sta_loc_norm[idx] + self._extra_range[idx]])
-                elif sta_loc_norm[idx] < sou_loc_norm[idx]:
-                    loc_bound.append([sta_loc_norm[idx] - self._extra_range[idx]
-                                      , sou_loc_norm[idx] + self._extra_range[idx]])
-                else:
-                    loc_bound.append([sta_loc_norm[idx], sou_loc_norm[idx] + self._grid_gap[idx]])
+        for idx in range(self._norm.get_norm_index(sta_loc, stage)
+                         +int(-self._extra_range[0]/self._norm.get_grid_gap(stage)[0]
+                              -self._extra_range[1]/self._norm.get_grid_gap(stage)[1]*num_lon)
+                         , self._norm.get_norm_index(sou_loc, stage)
+                         +int(+self._extra_range[0]/self._norm.get_grid_gap(stage)[0]
+                              +self._extra_range[1]/self._norm.get_grid_gap(stage)[1]*num_lon
+                              +(self._extra_range[2]/self._norm.get_grid_gap(stage)[2]
+                                *num_lon*num_lat))):
+            if self._is_in_boundary(idx, num_lon, num_lat):
+                for inc in incs:
+                    if self._is_in_boundary(idx + inc, num_lon, num_lat):
+                        loc = self._norm.recover_norm_loc(idx, stage)
+                        loc_adj = self._norm.recover_norm_loc(idx+inc, stage)
+                        dist = my_util.get_distance_in_earth(loc, loc_adj
+                                                             , my_util.get_shiftlo(self
+                                                                                   ._norm
+                                                                                   .get_norm_loc(sta_loc
+                                                                                                 , stage)
+                                                                                   , self
+                                                                                   ._norm
+                                                                                   .get_norm_loc(sou_loc
+                                                                                                 , stage))
+                                                             , 6374.7524414062500)
+                        weight = dist * (1 / self._geo.get_speed(loc)
+                                         + 1 / self._geo.get_speed(loc_adj) * 0.5)
+                        edge.append(Edge(idx, idx+inc, weight))
 
-            for lon in list(my_util.drange(loc_bound[0][0], loc_bound[0][1], self._grid_gap[0])):
-                for lat in list(my_util.drange(loc_bound[1][0], loc_bound[1][1]
-                                               , self._grid_gap[1])):
-                    for dep in list(my_util.drange(loc_bound[2][0], loc_bound[2][1]
-                                                   , self._grid_gap[2])):
-                        loc = [lon, lat, dep]
-                        loc_idx = self._norm.get_norm_index(loc)
-                        loc_speed = self._geo.get_speed(loc)
-                        shift_lo = my_util.get_shiftlo(sta_loc_norm, sou_loc_norm)
-                        for inc in incs:
-                            loc_adj = loc + inc
-                            if my_util.is_in_boundary(loc_adj, loc_bound):
-                                continue
-                            else:
-                                loc_adj_idx = self._norm.get_norm_index(loc)
-                                loc_adj_speed = self._geo.get_speed(loc)
-                                dist = my_util.get_distance_in_earth(loc, loc_adj, shift_lo
-                                                                     , 6374.7524414062500)
-                                weight = dist * (1 / loc_speed + 1 / loc_adj_speed) * 0.5
-                                self._edge.append(Edge(loc_idx, loc_adj_idx, weight))
 
-        return self._edge
-
+        return edge
 
 def main():
     """ unit test
     """
+    graphbuild = GraphBuilder()
+    loc_sta = [120, 22, 0]
+    loc_sou = [121, 23, 1]
+    print("The station is ", loc_sta)
+    print("The source is ", loc_sou)
+    edge = graphbuild.build_graph(loc_sta, loc_sou, 1)
+    print("The number of edges is ", len(edge))
+
 if __name__ == '__main__':
     main()
