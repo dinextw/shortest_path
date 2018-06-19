@@ -56,6 +56,7 @@ class GraphBuilder(object):
     def __init__(self, settings=None):
         if settings is None:
             self._extra_range = [0.02, 0.02, 20]
+            self._ranges = [0.12, 0.12, 4]
         self._norm = normgrid.NormGrid()
         self._geo = geomodel.GeoModel()
         self._idx_loc_min = None
@@ -93,7 +94,7 @@ class GraphBuilder(object):
             return False
 
         return True
-    def build_graph(self, sta_loc, sou_loc, stage):
+    def build_graph(self, sta_loc, sou_loc, stage, path=None):
         """ Build the whole graph
         Args:
             sta_loc: location of station
@@ -109,44 +110,51 @@ class GraphBuilder(object):
         num_lat = self._norm.get_num_lat_index(stage)
 
         edge = []
-        self._set_boundary(sta_loc, sou_loc, stage)
+        incs = [1, num_lon, 1+num_lon, num_lon*num_lat, num_lon*num_lat+1
+                , num_lon*num_lat+num_lon, num_lon*num_lat+num_lon+1
+                , num_lon*num_lat-num_lon, num_lon*num_lat-num_lon+1
+                , 1-num_lon
+                , 1-num_lon-num_lon*num_lat, 1-num_lat*num_lon, 1+num_lon-num_lat*num_lon]
         if stage == 1:
-            incs = [1, num_lon, 1+num_lon, num_lon*num_lat, num_lon*num_lat+1
-                    , num_lon*num_lat+num_lon, num_lon*num_lat+num_lon+1
-                    , num_lon*num_lat-num_lon, num_lon*num_lat-num_lon+1
-                    , 1-num_lon
-                    , 1-num_lon-num_lon*num_lat, 1-num_lat*num_lon, 1+num_lon-num_lat*num_lon]
+            sta_loc = [sta_loc]
+            sou_loc = [sou_loc]
         elif stage == 2:
-            print("Under construction in building stage 2 graph")
-            return None
+            if path is None:
+                print("Error in empty stage 1 path")
+                return None
+            sta_loc = [[a-b/2 for a, b in zip(sublist, self._ranges)] for sublist in sta_loc]
+            sou_loc = [[a+b/2 for a, b in zip(sublist, self._ranges)] for sublist in sta_loc]
         else:
-            print("Error in stage selection at building graph")
+            print("Error in stage selection in building graph initialization")
             return None
-        for diff_idx_dep in range(0, self._idx_loc_max-self._idx_loc_lonlatmax+1, num_lon*num_lat):
-            for diff_idx_lat in range(0, self._idx_loc_lonlatmax-self._idx_loc_lonmax+1, num_lon):
-                for idx in range(self._idx_loc_min + diff_idx_lat + diff_idx_dep
-                                 , self._idx_loc_lonmax + 1 + diff_idx_lat + diff_idx_dep):
-                    for inc in incs:
-                        if self._is_in_boundary(idx + inc, num_lon, num_lat):
-                            loc = self._norm.recover_norm_loc(idx, stage)
-                            loc_adj = self._norm.recover_norm_loc(idx+inc, stage)
-                            dist = (my_util
-                                    .get_distance_in_earth(loc, loc_adj
-                                                           , (my_util
-                                                              .get_shiftlo(self
-                                                                           ._norm
-                                                                           .get_norm_loc(sta_loc
-                                                                                         , stage)
-                                                                           , (self
-                                                                              ._norm
-                                                                              .get_norm_loc(sou_loc
-                                                                                            , stage
-                                                                                           ))))
-                                                           , 6374.7524414062500))
-                            edge.append(Edge(idx, idx+inc, dist*(1/self._geo.get_speed(loc)
-                                                                 +1/self._geo.get_speed(loc_adj)
-                                                                 *0.5)))
-
+        for (sta, sou) in zip(sta_loc, sou_loc):
+            self._set_boundary(sta, sou, stage)
+            for diff_idx_dep in range(0, self._idx_loc_max-self._idx_loc_lonlatmax+1
+                                      , num_lon*num_lat):
+                for diff_idx_lat in range(0, self._idx_loc_lonlatmax-self._idx_loc_lonmax+1
+                                          , num_lon):
+                    for idx in range(self._idx_loc_min + diff_idx_lat + diff_idx_dep
+                                     , self._idx_loc_lonmax + 1 + diff_idx_lat + diff_idx_dep):
+                        for inc in incs:
+                            if self._is_in_boundary(idx + inc, num_lon, num_lat):
+                                loc = self._norm.recover_norm_loc(idx, stage)
+                                loc_adj = self._norm.recover_norm_loc(idx+inc, stage)
+                                dist = (my_util
+                                        .get_distance_in_earth(loc, loc_adj
+                                                               , (my_util
+                                                                  .get_shiftlo(self._norm
+                                                                               .get_norm_loc(sta
+                                                                                             , stage
+                                                                                            )
+                                                                               , (self
+                                                                                  ._norm
+                                                                                  .get_norm_loc(sou
+                                                                                                , stage
+                                                                                               ))))
+                                                               , 6374.7524414062500))
+                                edge.append(Edge(idx, idx+inc, dist*(1/self._geo.get_speed(loc)
+                                                                     +1/self._geo.get_speed(loc_adj)
+                                                                     *0.5)))
 
         return edge
 
