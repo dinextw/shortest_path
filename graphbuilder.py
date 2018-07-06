@@ -53,7 +53,7 @@ class Edge(object):
             print("Weight out of range")
         else:
             self._weight = weight
-#func中間空一格
+
     def get_info(self):
         """ Return the information of edge
         Args:
@@ -64,7 +64,6 @@ class Edge(object):
         """
         return [self._idx_vertex1, self._idx_vertex2, self._weight]
 
-#class中間空兩格
 
 class GraphBuilder(object):
     """ Build the edge of the graph
@@ -72,7 +71,7 @@ class GraphBuilder(object):
     def __init__(self, settings=None):
         if settings is None:
             self._extra_range = [0.02, 0.02, 20]
-            self._ranges = [0.12, 0.12, 4]
+            self._ranges = [0.05, 0.05, 2]
         self._norm = normgrid.NormGrid()
         self._geo = geomodel.GeoModel()
         self._bnd = {}
@@ -132,7 +131,6 @@ class GraphBuilder(object):
         """
         for inc in self._incs:
             if self._is_in_boundary(idx + inc, setting['num_lon'], setting['num_lat']):
-                #把用loc改成只用index來算
                 loc = self._norm.recover_norm_loc(idx, setting['stage'])
                 loc_adj = self._norm.recover_norm_loc(idx+inc, setting['stage'])
                 dist = (my_util.get_distance_in_earth(loc, loc_adj, setting['shiftlo']
@@ -147,6 +145,10 @@ class GraphBuilder(object):
                                                 *0.5))
                     if edge in edges or edge_reverse in edges:
                         continue
+                    # --> Produce edge list to draw and check link level in Matlab
+                    #with open('edge.txt', 'a') as the_file:
+                    #    edge_info = edge.get_info()
+                    #    the_file.write(str(edge_info)+"\n")
                 edges.add(edge)
 
     def _divide_and_create(self, edges, stage, setting):
@@ -198,7 +200,7 @@ class GraphBuilder(object):
         """ Build the whole graph by edge list
         The graph consists of overlapping or connecting cubics.
         Each cubic is formed by loc_upper(uppermost coordiante) and loc_lower(lowermost coordiante)
-        Use inc to divide cubic furthrer into vertex
+        Divide cubic furthrer into vertex and then create edge
         Args:
             sta_loc: location of station
             sou_loc: location of source
@@ -210,8 +212,6 @@ class GraphBuilder(object):
         """
         edges = set()
         self._bnd = {}
-        #Stage 2可以加的數量更多
-        #改成統一往dep向下比較好理解
         if stage == 1:
             loc_bound_upper = [sta_loc]
             loc_bound_lower = [sou_loc]
@@ -219,13 +219,11 @@ class GraphBuilder(object):
             if path is None:
                 print("Error in empty stage 1 path")
                 return None
-            #注意變數名稱(這樣讀的人會被誤導）
             loc_bound_upper = [[a-b/2 for a, b in zip(sublist, self._ranges)] for sublist in path]
             loc_bound_lower = [[a+b/2 for a, b in zip(sublist, self._ranges)] for sublist in path]
         else:
             print("Error in stage selection in building graph initialization")
             return None
-        #分成兩個func來取不同stage的點（再用list共同傳入最後的建立edge區，因為stage 2的範圍根stage 1不太一樣）
         num_lon = self._norm.get_num_lon_index(stage)
         num_lat = self._norm.get_num_lat_index(stage)
         self._build_inc(num_lon, num_lat, stage)
