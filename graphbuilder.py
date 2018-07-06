@@ -2,6 +2,7 @@
 
 """ The stuffs related to building graph.
 """
+import time
 import normgrid
 import geomodel
 import my_util
@@ -13,6 +14,17 @@ class Edge(object):
         self._idx_vertex1 = idx_vertex1
         self._idx_vertex2 = idx_vertex2
         self._weight = weight
+
+    def __eq__(self, that):
+        if not isinstance(that, Edge):
+            return False
+        info_that = that.get_info()
+        return self._idx_vertex1 == info_that[0] and self._idx_vertex2 == info_that[1]
+
+    def __hash__(self):
+        idx_sort = sorted([self._idx_vertex1, self._idx_vertex2])
+        return ((idx_sort[0]+idx_sort[1])*(idx_sort[0]+idx_sort[1]+1)//2
+                +idx_sort[1])
 
     def set_idx(self, idx_vertex1, idx_vertex2):
         """ Set the index of connected vertice
@@ -51,6 +63,7 @@ class Edge(object):
             Native exceptions.
         """
         return [self._idx_vertex1, self._idx_vertex2, self._weight]
+
 #class中間空兩格
 
 class GraphBuilder(object):
@@ -107,6 +120,16 @@ class GraphBuilder(object):
         return True
 
     def _create_edge(self, edges, idx, setting):
+        """ Create edge for each vertex
+        Add inc to create edge in different directions
+        then check if the connected vertex exists or the edge is repeated
+        Args:
+            edges: edge list to add
+            idx: index of the current vertex
+        Returns:
+        Raises:
+            Native exceptions.
+        """
         for inc in self._incs:
             if self._is_in_boundary(idx + inc, setting['num_lon'], setting['num_lat']):
                 #把用loc改成只用index來算
@@ -127,6 +150,16 @@ class GraphBuilder(object):
                 edges.add(edge)
 
     def _divide_and_create(self, edges, stage, setting):
+        """ Divide cubic into vertex and create edge
+        Designate cubic's lon, lat, dep to divide into vertex, then create edge by each vertex
+        Args:
+            edges: edge list to add
+            stage: designated stage
+            setting: formed by variables
+        Returns:
+        Raises:
+            Native exceptions.
+        """
         shiftlo = my_util.get_shiftlo(self._norm.get_norm_loc(setting['loc_upper'], stage)
                                       , self._norm.get_norm_loc(setting['loc_lower'], stage))
         for diff_idx_dep in range(0, self._bnd['idx_loc_max']-self._bnd['idx_loc_lonlatmax']+1
@@ -162,17 +195,21 @@ class GraphBuilder(object):
                             self._incs.append(diff_lon+diff_lat+diff_dep)
 
     def build_graph(self, sta_loc, sou_loc, stage, path=None):
-        """ Build the whole graph
+        """ Build the whole graph by edge list
+        The graph consists of overlapping or connecting cubics.
+        Each cubic is formed by loc_upper(uppermost coordiante) and loc_lower(lowermost coordiante)
+        Use inc to divide cubic furthrer into vertex
         Args:
             sta_loc: location of station
             sou_loc: location of source
-            stage: number of stage
+            stage: designated stage
         Returns:
             edge: list of edges in the graph
         Raises:
             Native exceptions.
         """
         edges = set()
+        self._bnd = {}
         #Stage 2可以加的數量更多
         #改成統一往dep向下比較好理解
         if stage == 1:
@@ -208,7 +245,6 @@ def main():
 
     graphbuild = GraphBuilder()
 
-
     # --> check for Stage 1
     loc_sta = [120, 23, 0]
     loc_sou = [120.01, 23.01, 1]
@@ -217,13 +253,15 @@ def main():
     edge = graphbuild.build_graph(loc_sta, loc_sou, 1)
     print("The number of edges is ", len(edge))
 
-
     # --> check for Stage 2
+    time_start = time.time()
     loc_sta = [120, 23, 0]
     loc_sou = [120.01, 23.01, 1]
     print("The station is ", loc_sta)
     print("The source is ", loc_sou)
     edge = graphbuild.build_graph(loc_sta, loc_sou, 2, [loc_sta, loc_sou])
+    time_end = time.time()
     print("The number of edges is ", len(edge))
+    print("CPU Time is ", time_end - time_start)
 if __name__ == '__main__':
     main()
