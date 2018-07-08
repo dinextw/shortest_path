@@ -145,7 +145,7 @@ class GraphBuilder(object):
                                                 *0.5))
                     if edge in edges or edge_reverse in edges:
                         continue
-                    # --> Produce edge list to draw and check link level in Matlab
+                    # --> Use Matlab to check if number of edges per vertex is 124
                     #with open('edge.txt', 'a') as the_file:
                     #    edge_info = edge.get_info()
                     #    the_file.write(str(edge_info)+"\n")
@@ -180,6 +180,18 @@ class GraphBuilder(object):
                                      )
 
     def _build_inc(self, num_lon, num_lat, stage):
+        """ Create inc for desinate stage
+        For Stage 1, link level = 1 => nonoverlapping one cubic
+        , so incs can be in specific directions only
+        For Stage 2, link level = 2 => cubics may be overlapping
+        . create inc in all the directions and then filter repeated ones in other function later
+        Args:
+            num_lon: number of longitude indexes
+            num_lat: number of latitude indexes
+        Returns:
+        Raises:
+            Native exceptions.
+        """
         self._incs = []
         if stage == 1:
             self._incs = [1, num_lon, 1+num_lon, num_lon*num_lat, num_lon*num_lat+1
@@ -235,6 +247,7 @@ class GraphBuilder(object):
                                                                  , 'num_lon':num_lon
                                                                              , 'num_lat':num_lat})
         return edges
+
 
 def main():
     """ unit test
