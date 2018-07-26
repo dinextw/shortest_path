@@ -2,7 +2,7 @@
 
 """ The stuffs related to building graph.
 """
-import time
+import unittest
 import normgrid
 import geomodel
 import my_util
@@ -72,8 +72,13 @@ class GraphBuilder(object):
         if settings is None:
             self._extra_range = [0.02, 0.02, 20]
             self._ranges = [0.05, 0.05, 2]
+            path_model = None
+        else:
+            self._extra_range = settings['extra_range']
+            self._ranges = settings['ranges']
+            path_model = settings['path_model']
         self._norm = normgrid.NormGrid()
-        self._geo = geomodel.GeoModel()
+        self._geo = geomodel.GeoModel(path_model)
         self._bnd = {}
         self._incs = []
 
@@ -138,17 +143,12 @@ class GraphBuilder(object):
                 edge = Edge(idx, idx+inc, dist*(1/self._geo.get_speed(loc)
                                                 +1/self._geo.get_speed(loc_adj)
                                                 *0.5))
-                if setting['stage'] == 2:
-                    edge_reverse = Edge(idx+inc, idx
-                                        , dist*(1/self._geo.get_speed(loc)
-                                                +1/self._geo.get_speed(loc_adj)
-                                                *0.5))
-                    if edge in edges or edge_reverse in edges:
-                        continue
-                    # --> Use Matlab to check if number of edges per vertex is 124
-                    #with open('edge.txt', 'a') as the_file:
-                    #    edge_info = edge.get_info()
-                    #    the_file.write(str(edge_info)+"\n")
+                edge_reverse = Edge(idx+inc, idx
+                                    , dist*(1/self._geo.get_speed(loc)
+                                            +1/self._geo.get_speed(loc_adj)
+                                            *0.5))
+                if edge in edges or edge_reverse in edges:
+                    continue
                 edges.add(edge)
 
     def _divide_and_create(self, edges, stage, setting):
@@ -183,8 +183,8 @@ class GraphBuilder(object):
         """ Create inc for desinate stage
         For Stage 1, link level = 1 => nonoverlapping one cubic
         , so incs can be in specific directions only
-        For Stage 2, link level = 2 => cubics may be overlapping
-        . create inc in all the directions and then filter repeated ones in other function later
+        For Stage 2, link level = 4 => cubics may be overlapping
+        . Create inc in all the directions and then filter repeated ones in other function later
         Args:
             num_lon: number of longitude indexes
             num_lat: number of latitude indexes
@@ -194,11 +194,13 @@ class GraphBuilder(object):
         """
         self._incs = []
         if stage == 1:
-            self._incs = [1, num_lon, 1+num_lon, num_lon*num_lat, num_lon*num_lat+1
-                          , num_lon*num_lat+num_lon, num_lon*num_lat+num_lon+1
-                          , num_lon*num_lat-num_lon, num_lon*num_lat-num_lon+1
-                          , 1-num_lon
-                          , 1-num_lon-num_lon*num_lat, 1-num_lat*num_lon, 1+num_lon-num_lat*num_lon]
+            for diff_dep in range(0, 2*num_lon*num_lat, num_lon*num_lat):
+                for diff_lat in range(-1*num_lon, 2*num_lon, num_lon):
+                    for diff_lon in range(-1, 2, 1):
+                        if diff_lon+diff_lat+diff_dep == 0:
+                            continue
+                        else:
+                            self._incs.append(diff_lon+diff_lat+diff_dep)
         elif stage == 2:
             for diff_dep in range(0, 3*num_lon*num_lat, num_lon*num_lat):
                 for diff_lat in range(-2*num_lon, 3*num_lon, num_lon):
@@ -224,18 +226,16 @@ class GraphBuilder(object):
         """
         edges = set()
         self._bnd = {}
+        assert sta_loc != sou_loc, 'Error in same station and source location'
+        assert stage == 1 or stage == 2, 'Error in stage selection in building graph initialization'
+
         if stage == 1:
             loc_bound_upper = [sta_loc]
             loc_bound_lower = [sou_loc]
         elif stage == 2:
-            if path is None:
-                print("Error in empty stage 1 path")
-                return None
+            assert path is not None, 'Error in empty stage 1 path'
             loc_bound_upper = [[a-b/2 for a, b in zip(sublist, self._ranges)] for sublist in path]
             loc_bound_lower = [[a+b/2 for a, b in zip(sublist, self._ranges)] for sublist in path]
-        else:
-            print("Error in stage selection in building graph initialization")
-            return None
         num_lon = self._norm.get_num_lon_index(stage)
         num_lat = self._norm.get_num_lat_index(stage)
         self._build_inc(num_lon, num_lat, stage)
@@ -248,31 +248,127 @@ class GraphBuilder(object):
                                                                              , 'num_lat':num_lat})
         return edges
 
+def _test_mod_vertex_que(norm, idx_vertexes):
+    num_bnd = 0
+    num_surface = 0
+    idx_bnd = 0
+    loc_check = []
+    loc_check_que = []
+    for idx, val in enumerate(idx_vertexes):
+        if idx == 0:
+            loc_check_que.append(norm.recover_norm_loc(idx_vertexes[0], 1))
+        elif idx == len(idx_vertexes)-1:
+            loc_check_que.append(norm.recover_norm_loc(idx_vertexes[idx_bnd], 1))
+            loc_check_que.append(norm.recover_norm_loc(idx_vertexes[idx], 1))
+            loc_check.append(loc_check_que)
+            break
+        elif idx > 0 and idx_vertexes[idx] > idx_vertexes[idx-1]+1:
+            if num_bnd == 0:
+                loc_check_que.append(norm.recover_norm_loc(idx_vertexes[idx-1], 1))
+                num_bnd += 1
+            elif num_bnd == 1:
+                if idx_vertexes[idx] > idx_vertexes[idx-1]+norm.get_num_lon_index(1):
+                    loc_check_que.append(norm.recover_norm_loc(idx_vertexes[idx_bnd], 1))
+                    loc_check_que.append(norm.recover_norm_loc(idx_vertexes[idx-1], 1))
+                    if num_surface == 0:
+                        loc_check.append(loc_check_que)
+                    loc_check_que = []
+                    loc_check_que.append(norm.recover_norm_loc(idx_vertexes[idx], 1))
+                    num_surface += 1
+                    num_bnd = 0
+            idx_bnd = idx
+    return loc_check
+
+
+class GraphTest(unittest.TestCase):
+    """ Test with vertex and edge correctness in graph
+    """
+    def test_mod_with_vertex_num(self):
+        """ Test with number of vertexes in graph
+        """
+        settings = {'extra_range':[0, 0, 0], 'ranges':[0.01, 0.01, 1], 'path_model':None}
+        graphbuild = GraphBuilder(settings)
+        norm = normgrid.NormGrid()
+        loc_sta = [120, 23, 0]
+        loc_sou = [120.01, 23.01, 1]
+        grid_gap = norm.get_grid_gap(1)
+        edges = graphbuild.build_graph(loc_sta, loc_sou, 1)
+        idx_vertex = []
+        for edge in edges:
+            edge_info = edge.get_info()
+            idx_vertex.append(edge_info[0])
+            idx_vertex.append(edge_info[1])
+        grid_gap_whole = [(x1 - x2)/x3+1 for (x1, x2, x3) in zip(loc_sou, loc_sta, grid_gap)]
+        self.assertEqual(len(set(idx_vertex))
+                         , int(grid_gap_whole[0]*grid_gap_whole[1]*grid_gap_whole[2]))
+
+    def test_mod_with_vertex_coor(self):
+        """ Test with coordinate of boundary vertexes in graph
+        """
+        settings = {'extra_range':[0, 0, 0], 'ranges':[0.01, 0.01, 1], 'path_model':None}
+        graphbuild = GraphBuilder(settings)
+        norm = normgrid.NormGrid()
+        loc = [[120, 23, 0], [120.01, 23.01, 1], [120, 23, 1], [120, 23.01, 0], [120.01, 23, 0]
+               , [120, 23.01, 1], [120.01, 23.01, 0], [120.01, 23, 1]]
+        edges = graphbuild.build_graph([120, 23, 0], [120.01, 23.01, 1], 1)
+        idx_vertexes = []
+        for edge in edges:
+            edge_info = edge.get_info()
+            idx_vertexes.append(edge_info[0])
+            idx_vertexes.append(edge_info[1])
+        idx_vertexes = list(set(idx_vertexes))
+        idx_vertexes.sort()
+        loc_check = _test_mod_vertex_que(norm, idx_vertexes)
+        loc_check = [item for sublist in loc_check for item in sublist]
+        print(loc_check)
+        for elem_loc in loc_check:
+            self.assertTrue(elem_loc in loc, msg=None)
+
+    def test_mod_with_edge_num(self):
+        """ Test with number of edges in the graph
+        """
+        settings = {'extra_range':[0, 0, 0], 'ranges':[0.01, 0.01, 1], 'path_model':None}
+        graphbuild = GraphBuilder(settings)
+        loc_sta = [120, 23, 0]
+        loc_sou = [120.01, 23.01, 1]
+        edges = graphbuild.build_graph(loc_sta, loc_sou, 1)
+        self.assertEqual(len(edges), 28)
+
+    def test_mod_with_edge_direction(self):
+        """ Test edge direction by dijkstra
+        """
+        settings = {'extra_range':[0, 0, 0], 'ranges':[0.01, 0.01, 1]
+                                                      , 'path_model':'./_input/MOD_H13_uniform'}
+        graphbuild = GraphBuilder(settings)
+        norm = normgrid.NormGrid()
+        loc_sta = [120, 23, 0]
+        loc_sou = [120.01, 23.01, 1]
+        edges = graphbuild.build_graph(loc_sta, loc_sou, 1)
+        idx_vertex = []
+        for edge in edges:
+            edge_info = edge.get_info()
+        idx_vertex.append(edge_info[0])
+        idx_vertex.append(edge_info[1])
+        with open('../dijkstra/edges.txt', 'a') as the_file:
+            line = (str(len(set(idx_vertex)))+", "
+                    +str(norm.get_norm_index(loc_sou, 1)-norm.get_norm_index(loc_sta, 1))+"\n")
+            the_file.write(line)
+            for edge in edges:
+                edge_info = edge.get_info()
+                line = (str(edge_info[0]-norm.get_norm_index(loc_sta, 1))
+                        +", "+str(edge_info[1]-norm.get_norm_index(loc_sta, 1))
+                        +", "+str(edge_info[2])+"\n")
+                the_file.write(line)
+        cmd = "../dijkstra/dijk2"
+        my_util.run_cmd_get_result(cmd)
 
 def main():
     """ unit test
     """
 
-
-    graphbuild = GraphBuilder()
-
     # --> check for Stage 1
-    loc_sta = [120, 23, 0]
-    loc_sou = [120.01, 23.01, 1]
-    print("The station is ", loc_sta)
-    print("The source is ", loc_sou)
-    edge = graphbuild.build_graph(loc_sta, loc_sou, 1)
-    print("The number of edges is ", len(edge))
+    unittest.main()
 
-    # --> check for Stage 2
-    time_start = time.time()
-    loc_sta = [120, 23, 0]
-    loc_sou = [120.01, 23.01, 1]
-    print("The station is ", loc_sta)
-    print("The source is ", loc_sou)
-    edge = graphbuild.build_graph(loc_sta, loc_sou, 2, [loc_sta, loc_sou])
-    time_end = time.time()
-    print("The number of edges is ", len(edge))
-    print("CPU Time is ", time_end - time_start)
+
 if __name__ == '__main__':
     main()
