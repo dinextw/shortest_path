@@ -181,10 +181,8 @@ class GraphBuilder(object):
 
     def _build_inc(self, num_lon, num_lat, stage):
         """ Create inc for desinate stage
-        For Stage 1, link level = 1 => nonoverlapping one cubic
-        , so incs can be in specific directions only
-        For Stage 2, link level = 4 => cubics may be overlapping
-        . Create inc in all the directions and then filter repeated ones in other function later
+        Stage 1 and Stage 2 with same code => cubics may be overlapping
+        => Create inc in all the directions and then filter repeated ones in other function later
         Args:
             num_lon: number of longitude indexes
             num_lat: number of latitude indexes
