@@ -3,7 +3,6 @@
 """ The stuffs related to building geo model.
 """
 import bisect
-import normgrid
 
 #是否有private class的可能（在下面新增的時候？）
 class GeoSpeed(object):
@@ -120,16 +119,14 @@ class GeoModel(object):
     Public Methods:
         get_speed: get the speed of the location
     """
-    _scales = []
-    _geo_speeds = []
-    _norm = None
-    _filepath = None
     def __init__(self, filepath=None):
         if filepath is None:
             self._filepath = "./_input/MOD_H13"
         else:
             self._filepath = filepath
-        self._norm = normgrid.NormGrid()
+        self._scales = []
+        self._geo_speeds = []
+        self._norm = None
         self._read_model()
 
     def _read_scales(self, nums_line, lons_line, lats_line, deps_line):
