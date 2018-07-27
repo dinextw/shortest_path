@@ -126,7 +126,6 @@ class GeoModel(object):
             self._filepath = filepath
         self._scales = []
         self._geo_speeds = []
-        self._norm = None
         self._read_model()
 
     def _read_scales(self, nums_line, lons_line, lats_line, deps_line):
