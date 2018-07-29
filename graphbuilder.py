@@ -3,6 +3,7 @@
 """ The stuffs related to building graph.
 """
 import unittest
+import json
 import normgrid
 import geomodel
 import my_util
@@ -141,12 +142,12 @@ class GraphBuilder(object):
                 dist = (my_util.get_distance_in_earth(loc, loc_adj, setting['shiftlo']
                                                       , 6374.7524414062500))
                 edge = Edge(idx, idx+inc, dist*(1/self._geo.get_speed(loc)
-                                                +1/self._geo.get_speed(loc_adj)
-                                                *0.5))
+                                                +1/self._geo.get_speed(loc_adj))
+                            *0.5)
                 edge_reverse = Edge(idx+inc, idx
                                     , dist*(1/self._geo.get_speed(loc)
-                                            +1/self._geo.get_speed(loc_adj)
-                                            *0.5))
+                                            +1/self._geo.get_speed(loc_adj))
+                                    *0.5)
                 if edge in edges or edge_reverse in edges:
                     continue
                 edges.add(edge)
@@ -318,7 +319,6 @@ class GraphTest(unittest.TestCase):
         idx_vertexes.sort()
         loc_check = _test_mod_vertex_que(norm, idx_vertexes)
         loc_check = [item for sublist in loc_check for item in sublist]
-        print(loc_check)
         for elem_loc in loc_check:
             self.assertTrue(elem_loc in loc, msg=None)
 
@@ -338,27 +338,63 @@ class GraphTest(unittest.TestCase):
         settings = {'extra_range':[0, 0, 0], 'ranges':[0.01, 0.01, 1]
                                                       , 'path_model':'./_input/MOD_H13_uniform'}
         graphbuild = GraphBuilder(settings)
-        norm = normgrid.NormGrid()
         loc_sta = [120, 23, 0]
         loc_sou = [120.01, 23.01, 1]
         edges = graphbuild.build_graph(loc_sta, loc_sou, 1)
+        norm = normgrid.NormGrid()
         idx_vertex = []
         for edge in edges:
             edge_info = edge.get_info()
-        idx_vertex.append(edge_info[0])
-        idx_vertex.append(edge_info[1])
-        with open('../dijkstra/edges.txt', 'a') as the_file:
-            line = (str(len(set(idx_vertex)))+", "
-                    +str(norm.get_norm_index(loc_sou, 1)-norm.get_norm_index(loc_sta, 1))+"\n")
+            idx_vertex.append(edge_info[0])
+            idx_vertex.append(edge_info[1])
+        idx_vertex = list(set(idx_vertex))
+        idx_vertex[idx_vertex.index(norm.get_norm_index(loc_sta, 1))] = idx_vertex[0]
+        idx_vertex[0] = norm.get_norm_index(loc_sta, 1)
+        with open('./_input/edges.txt', 'w') as the_file:
+            line = (str(len(idx_vertex))+", "
+                    +str(idx_vertex.index(norm.get_norm_index(loc_sou, 1)))+"\n")
             the_file.write(line)
             for edge in edges:
                 edge_info = edge.get_info()
-                line = (str(edge_info[0]-norm.get_norm_index(loc_sta, 1))
-                        +", "+str(edge_info[1]-norm.get_norm_index(loc_sta, 1))
+                line = (str(idx_vertex.index(edge_info[0]))
+                        +", "+str(idx_vertex.index(edge_info[1]))
                         +", "+str(edge_info[2])+"\n")
                 the_file.write(line)
-        cmd = "../dijkstra/dijk2"
-        my_util.run_cmd_get_result(cmd)
+        cmd = './../dijkstra/dijk2 ./_input/edges.txt'
+        result_dict = json.loads(my_util.run_cmd_get_result(cmd).decode('utf-8'))
+        self.assertEqual(result_dict['shortest_weight'], '1.81024')
+
+    def test_mod_with_more_edge(self):
+        """ Test edge correctness by more edges in dijkstra
+        """
+        settings = None
+        graphbuild = GraphBuilder(settings)
+        loc_sta = [121.740700, 24.428, -0.113000]
+        loc_sou = [121.860000, 24.79, 7.500000]
+        edges = graphbuild.build_graph(loc_sta, loc_sou, 1)
+        norm = normgrid.NormGrid()
+        idx_vertex = []
+        for edge in edges:
+            edge_info = edge.get_info()
+            idx_vertex.append(edge_info[0])
+            idx_vertex.append(edge_info[1])
+        idx_vertex = list(set(idx_vertex))
+        idx_vertex[idx_vertex.index(norm.get_norm_index(loc_sta, 1))] = idx_vertex[0]
+        idx_vertex[0] = norm.get_norm_index(loc_sta, 1)
+        with open('./_input/edges.txt', 'w') as the_file:
+            line = (str(len(idx_vertex))+", "
+                    +str(idx_vertex.index(norm.get_norm_index(loc_sou, 1)))+"\n")
+            the_file.write(line)
+            for edge in edges:
+                edge_info = edge.get_info()
+                line = (str(idx_vertex.index(edge_info[0]))
+                        +", "+str(idx_vertex.index(edge_info[1]))
+                        +", "+str(edge_info[2])+"\n")
+                the_file.write(line)
+        cmd = './../dijkstra/dijk2 ./_input/edges.txt'
+        result_dict = json.loads(my_util.run_cmd_get_result(cmd).decode('utf-8'))
+        self.assertTrue(bool(result_dict['shortest_weight']))
+
 
 def main():
     """ unit test
