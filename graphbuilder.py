@@ -225,6 +225,8 @@ class GraphBuilder(object):
         """
         edges = set()
         self._bnd = {}
+        assert isinstance(sta_loc, list) and isinstance(sou_loc, list) \
+                , 'Error in station or source location type'
         assert sta_loc != sou_loc, 'Error in same station and source location'
         assert stage == 1 or stage == 2, 'Error in stage selection in building graph initialization'
 
@@ -332,6 +334,16 @@ class GraphTest(unittest.TestCase):
         edges = graphbuild.build_graph(loc_sta, loc_sou, 1)
         self.assertEqual(len(edges), 28)
 
+    def test_mod_with_surface_edge(self):
+        """ Test with edge only on surface in the graph
+        """
+        settings = {'extra_range':[0, 0, 0], 'ranges':[0.01, 0.01, 1], 'path_model':None}
+        graphbuild = GraphBuilder(settings)
+        loc_sta = [120, 23, 0]
+        loc_sou = [120.01, 23, 1]
+        edges = graphbuild.build_graph(loc_sta, loc_sou, 1)
+        self.assertEqual(len(edges), 6)
+
     def test_mod_with_edge_direction(self):
         """ Test edge direction by dijkstra
         """
@@ -394,6 +406,7 @@ class GraphTest(unittest.TestCase):
         cmd = './../dijkstra/dijk2 ./_input/edges.txt'
         result_dict = json.loads(my_util.run_cmd_get_result(cmd).decode('utf-8'))
         self.assertTrue(bool(result_dict['shortest_weight']))
+
 
 
 def main():
