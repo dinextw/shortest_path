@@ -17,7 +17,7 @@ class ShortestPath(object):
         self._norm = normgrid.NormGrid()
         self._result = {}
         self._idx_vertex = {}
-        self._filepath_edges = './_input/edges.txt'
+        self._filepath_edges = '/mnt/ram-disk/edges.txt'
         self._filepath_dijk = './../dijkstra/dijk2'
         self._path = {}
 
@@ -152,6 +152,31 @@ class ShortestPathTest(unittest.TestCase):
         short.execute_dijk(loc_sta, loc_sou)
         weights = short.get_weight()
         self.assertEqual(weights[norm.get_norm_index(loc_sta, 2)], 0)
+
+    def test_mod_with_real_case(self):
+        """ Test with TAIGER case
+        """
+        short = ShortestPath()
+        loc_sou = [121.037670, 24.79534, -0.055000]
+        loc_sta = [121.264500, 24.145, -3.395000]
+        time = short.execute_dijk(loc_sta, loc_sou)
+        print(time)
+        short.export_path('./tmp/result0531_6_10.csv')
+
+        short = ShortestPath()
+        loc_sou = [120.229900, 23.5106, -0.006000]
+        loc_sta = [120.613800, 23.2455, -0.560000]
+        time = short.execute_dijk(loc_sta, loc_sou)
+        print(time)
+        short.export_path('./tmp/result0225_1_9.csv')
+
+        loc_sou = [120.413140, 23.42513, -0.020000]
+        loc_sta = [120.899800, 23.883, -1.015000]
+        time = short.execute_dijk(loc_sta, loc_sou)
+        print(time)
+        short.export_path('./tmp/result0531_2_14.csv')
+
+        self.assertEqual(0, 0)
 
 
 def main():
