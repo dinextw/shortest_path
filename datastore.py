@@ -156,6 +156,7 @@ class TestDataStore(object):
                                    , password=self._password
                                    , db=self._db_setting)
         self._cursor = self._db.cursor()
+
     def get_num_row(self):
         """ Return the number of row
         Args:
@@ -168,8 +169,28 @@ class TestDataStore(object):
                % self._db_setting)
         self._cursor.execute(sql)
         num_row = self._cursor.fetchone()[0]
-        self._db.close()
         return num_row
+
+    def delete_and_recreate_db(self):
+        """ Clean up and Recreate Database for other test
+        Args:
+        Returns:
+        Raises:
+            Native exceptions.
+        """
+        sql = "DROP DATABASE travel_time"
+        self._cursor.execute(sql)
+        sql = "CREATE DATABASE travel_time"
+        self._cursor.execute(sql)
+
+    def close_db(self):
+        """ Close the connection session
+        Args:
+        Returns:
+        Raises:
+            Native exceptions.
+        """
+        self._db.close()
 
 
 def _test_mod_read_weight_file(filepath):
@@ -203,15 +224,17 @@ class DataTest(unittest.TestCase):
         """
         test = DataStore()
 
-        info_result1 = _test_mod_read_weight_file('./tmp/result2.csv')
+        info_result1 = _test_mod_read_weight_file('./tmp/result1.csv')
         test.import_time(info_result1[0], info_result1[1])
 
-        info_result2 = _test_mod_read_weight_file('./tmp/result2.csv')
+        info_result2 = _test_mod_read_weight_file('./tmp/result1.csv')
         test.import_time(info_result2[0], info_result2[1])
         test.close_db()
 
         check = TestDataStore()
         num_row = check.get_num_row()
+        check.delete_and_recreate_db()
+        check.close_db()
         self.assertEqual(len(info_result1[0]), num_row)
 
     def test_mod_with_table_correctness(self):
@@ -234,20 +257,31 @@ class DataTest(unittest.TestCase):
         """ Test if two or more tables can be created in database
         """
         test = DataStore()
+        check = TestDataStore()
+        check.delete_and_recreate_db()
 
         info_result1 = _test_mod_read_weight_file('./tmp/result1.csv')
         info_result2 = _test_mod_read_weight_file('./tmp/result2.csv')
         test.import_time(info_result1[0], info_result1[1])
         test.import_time(info_result2[0], info_result2[1])
+
         time1 = []
+        time1_check = []
         for loc in info_result1[4]:
             time1.append(test.get_time(info_result1[3], loc[0:3]))
+            time1_check.append(loc[3])
         time2 = []
+        time2_check = []
         for loc in info_result2[4]:
             time2.append(test.get_time(info_result2[3], loc[0:3]))
+            time2_check.append(loc[3])
         test.close_db()
+        num_row = check.get_num_row()
 
-        self.assertNotEqual(time1, time2)
+        check.delete_and_recreate_db()
+        check.close_db()
+        self.assertEqual((num_row, time1, time2), (len(info_result1[0])+len(info_result2[0])
+                                                   , time1_check, time2_check))
 
 
 def main():
