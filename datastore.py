@@ -52,7 +52,7 @@ class TimeNode(object):
 
 
 class DataStore(object):
-    """ Build the edge of the graph
+    """ Build the database to store travel time
     """
     def __init__(self, settings=None):
         if settings is None:
@@ -117,7 +117,6 @@ class DataStore(object):
         Raises:
             Native exceptions.
         """
-        assert loc_sta != loc_sou, 'Error in same station and source location'
 
         idx_sta = self._norm.get_norm_index(loc_sta, 2)
         idx_sou = self._norm.get_norm_index(loc_sou, 2)
@@ -138,14 +137,50 @@ class DataStore(object):
         """
         self._db.close()
 
+class TestDataStore(object):
+    """ Access to database to check
+    """
+    def __init__(self, settings=None):
+        if settings is None:
+            self._host = '35.194.204.50'
+            self._user = 'root'
+            self._password = 'sh791114'
+            self._db_setting = 'travel_time'
+        else:
+            self._host = settings['host']
+            self._user = settings['root']
+            self._password = settings['password']
+            self._db_setting = settings['db']
+        self._db = pymysql.connect(host=self._host
+                                   , user=self._user
+                                   , password=self._password
+                                   , db=self._db_setting)
+        self._cursor = self._db.cursor()
+    def get_num_row(self):
+        """ Return the number of row
+        Args:
+        Returns:
+            num_row: total number of rows in database
+        Raises:
+            Native exceptions.
+        """
+        sql = ("SELECT SUM(table_rows) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '%s'"
+               % self._db_setting)
+        self._cursor.execute(sql)
+        num_row = self._cursor.fetchone()[0]
+        self._db.close()
+        return num_row
+
 
 def _test_mod_read_weight_file(filepath):
     norm = normgrid.NormGrid()
     with open(filepath, newline='') as file:
         csvreader = csv.reader(file)
         next(csvreader)
-        path = {}
+        idx_path = {}
+        loc_path = []
         count = 0
+
         for row in csvreader:
             row_float = []
             for elem in row:
@@ -153,32 +188,50 @@ def _test_mod_read_weight_file(filepath):
             if count == 0:
                 loc_sou = row_float[0:3]
                 count += 1
-            path[norm.get_norm_index(row_float[0:3], 2)] = row_float[3]
-        idx = norm.get_norm_index(row_float[0:3], 2)
+            idx_path[norm.get_norm_index(row_float[0:3], 2)] = row_float[3]
+            loc_path.append(row_float)
+        idx_sta = norm.get_norm_index(row_float[0:3], 2)
         loc_sta = row_float[0:3]
-    return (path, idx, loc_sou, loc_sta)
+    return (idx_path, idx_sta, loc_sou, loc_sta, loc_path)
 
 
 class DataTest(unittest.TestCase):
     """ Test with Database write and read action
     """
-    def test_mod_with_duplicate_table(self):
+    def test_mod_with_duplicate_element(self):
         """ Test if duplicate table will cause error in reading travel time
         """
         test = DataStore()
 
-        info_result1 = _test_mod_read_weight_file('./tmp/result1.csv')
+        info_result1 = _test_mod_read_weight_file('./tmp/result2.csv')
         test.import_time(info_result1[0], info_result1[1])
-        time1 = test.get_time(info_result1[3], info_result1[2])
 
-        info_result2 = _test_mod_read_weight_file('./tmp/result1.csv')
+        info_result2 = _test_mod_read_weight_file('./tmp/result2.csv')
         test.import_time(info_result2[0], info_result2[1])
-        time2 = test.get_time(info_result2[3], info_result2[2])
         test.close_db()
-        self.assertEqual(time1, time2)
+
+        check = TestDataStore()
+        num_row = check.get_num_row()
+        self.assertEqual(len(info_result1[0]), num_row)
+
+    def test_mod_with_table_correctness(self):
+        """ Test if travel times stored in table are correct
+        """
+        test = DataStore()
+
+        info_result = _test_mod_read_weight_file('./tmp/result1.csv')
+        test.import_time(info_result[0], info_result[1])
+
+        time = []
+        time_check = []
+        for loc in info_result[4]:
+            time.append(test.get_time(info_result[3], loc[0:3]))
+            time_check.append(loc[3])
+        test.close_db()
+        self.assertEqual(time, time_check)
 
     def test_mod_with_two_tables(self):
-        """ Test if different tables can be created in database
+        """ Test if two or more tables can be created in database
         """
         test = DataStore()
 
@@ -186,8 +239,12 @@ class DataTest(unittest.TestCase):
         info_result2 = _test_mod_read_weight_file('./tmp/result2.csv')
         test.import_time(info_result1[0], info_result1[1])
         test.import_time(info_result2[0], info_result2[1])
-        time1 = test.get_time(info_result1[3], info_result1[2])
-        time2 = test.get_time(info_result2[3], info_result2[2])
+        time1 = []
+        for loc in info_result1[4]:
+            time1.append(test.get_time(info_result1[3], loc[0:3]))
+        time2 = []
+        for loc in info_result2[4]:
+            time2.append(test.get_time(info_result2[3], loc[0:3]))
         test.close_db()
 
         self.assertNotEqual(time1, time2)
