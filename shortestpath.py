@@ -110,7 +110,12 @@ class ShortestPath(object):
         idx_weight = {}
         for weight, idx in zip(self._result['2']['total_shortest_vertex_weight']
                                , self._idx_vertex['2']):
-            idx_weight[idx] = float(weight)
+            if idx == self._idx_vertex['2'][0] or idx == self._idx_vertex['2'][-1]:
+                loc = self._norm.recover_norm_loc(idx, 2)
+                idx_weight[self._norm.get_norm_index(loc, 1)] = float(weight)
+            elif idx % 4 == 0:
+                loc = self._norm.recover_norm_loc(idx, 2)
+                idx_weight[self._norm.get_norm_index(loc, 1)] = float(weight)
         return idx_weight
 
 class ShortestPathTest(unittest.TestCase):

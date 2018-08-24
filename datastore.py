@@ -3,6 +3,7 @@
 """ The stuffs related to building graph.
 """
 import csv
+import time
 import unittest
 import pymysql
 import normgrid
@@ -10,9 +11,9 @@ import normgrid
 class TimeNode(object):
     """ Edge unit of the graph
     """
-    def __init__(self, idx, time):
+    def __init__(self, idx, t):
         self._idx = idx
-        self._time = time
+        self._time = t
 
     def set_idx(self, idx):
         """ Set the index of connected vertice
@@ -27,7 +28,7 @@ class TimeNode(object):
         else:
             self._idx = idx
 
-    def set_time(self, time):
+    def set_time(self, t):
         """ Set the weight of the edge
         Args:
             weight: weight of the edge
@@ -35,10 +36,10 @@ class TimeNode(object):
         Raises:
             Native exceptions.
         """
-        if time < 0:
+        if t < 0:
             print("Time out of range")
         else:
-            self._time = time
+            self._time = t
 
     def get_info(self):
         """ Return the information of edge
@@ -56,8 +57,8 @@ class DataStore(object):
     """
     def __init__(self, settings=None):
         if settings is None:
-            self._host = '35.194.204.50'
-            self._user = 'root'
+            self._host = '10.140.0.2'
+            self._user = 'dinex'
             self._password = 'sh791114'
             self._db_setting = 'travel_time'
         else:
@@ -97,15 +98,22 @@ class DataStore(object):
         sql = ("CREATE TABLE IF NOT EXISTS table_%d (ID BIGINT, TRAVEL_TIME FLOAT, PRIMARY KEY(ID))"
                % idx_sta)
         self._cursor.execute(sql)
-        for idx, time in idx_weight.items():
+        for idx, t in idx_weight.items():
             sql = ("INSERT INTO table_%d (id, travel_time) VALUES(%d, %f) \
                    ON DUPLICATE KEY UPDATE travel_time = LEAST(travel_time, VALUES(travel_time))"
-                   % (idx_sta, idx, time))
+                   % (idx_sta, idx, t))
             try:
                 self._cursor.execute(sql)
                 self._db.commit()
             except:
                 self._db.rollback()
+
+        sql = ("CREATE TABLE IF NOT EXISTS table_memory_%d \
+               (ID BIGINT, TRAVEL_TIME FLOAT, PRIMARY KEY(ID)) ENGINE=MEMORY AS SELECT * FROM table_%d"
+               % (idx_sta, idx_sta))
+        self._cursor.execute(sql)
+        sql = ("DROP TABLE table_%d" % idx_sta)
+        self._cursor.execute(sql)
 
     def get_time(self, loc_sta, loc_sou):
         """ Get the travel time of specific source
@@ -120,13 +128,39 @@ class DataStore(object):
 
         idx_sta = self._norm.get_norm_index(loc_sta, 2)
         idx_sou = self._norm.get_norm_index(loc_sou, 2)
-        sql = "SELECT travel_time FROM table_%d WHERE id = %d" % (idx_sta, idx_sou)
+        sql = "SELECT travel_time FROM table_memory_%d WHERE id = %d" % (idx_sta, idx_sou)
         try:
             self._cursor.execute(sql)
             travel_time = self._cursor.fetchone()[0]
             return travel_time
         except:
             print("Error in looking for travel time")
+
+    def delete_and_recreate_db(self):
+        """ Clean up and Recreate Database for other test
+            Args:
+            Returns:
+            Raises:
+                Native exceptions.
+        """
+        sql = "DROP DATABASE %s" % self._db_setting
+        self._cursor.execute(sql)
+        sql = "CREATE DATABASE %s" % self._db_setting
+        self._cursor.execute(sql)
+
+    def copy_table(self, idx_sta, idx_sta_ori):
+        """ Copy table into new one
+            Args:
+            Returns:
+            Raises:
+                Native exceptions.
+        """
+        sql = ("CREATE TABLE table_memory_%d LIKE table_memory_%d"
+               % (idx_sta, idx_sta_ori))
+        self._cursor.execute(sql)
+        sql = ("INSERT table_memory_%d SELECT * FROM table_memory_%d"
+               % (idx_sta, idx_sta_ori))
+        self._cursor.execute(sql)
 
     def close_db(self):
         """ Close the connection session
@@ -142,8 +176,8 @@ class TestDataStore(object):
     """
     def __init__(self, settings=None):
         if settings is None:
-            self._host = '35.194.204.50'
-            self._user = 'root'
+            self._host = '10.140.0.2'
+            self._user = 'dinex'
             self._password = 'sh791114'
             self._db_setting = 'travel_time'
         else:
@@ -171,18 +205,6 @@ class TestDataStore(object):
         num_row = self._cursor.fetchone()[0]
         return num_row
 
-    def delete_and_recreate_db(self):
-        """ Clean up and Recreate Database for other test
-        Args:
-        Returns:
-        Raises:
-            Native exceptions.
-        """
-        sql = "DROP DATABASE travel_time"
-        self._cursor.execute(sql)
-        sql = "CREATE DATABASE travel_time"
-        self._cursor.execute(sql)
-
     def close_db(self):
         """ Close the connection session
         Args:
@@ -209,9 +231,9 @@ def _test_mod_read_weight_file(filepath):
             if count == 0:
                 loc_sou = row_float[0:3]
                 count += 1
-            idx_path[norm.get_norm_index(row_float[0:3], 2)] = row_float[3]
+            idx_path[norm.get_norm_index(row_float[0:3], 1)] = row_float[3]
             loc_path.append(row_float)
-        idx_sta = norm.get_norm_index(row_float[0:3], 2)
+        idx_sta = norm.get_norm_index(row_float[0:3], 1)
         loc_sta = row_float[0:3]
     return (idx_path, idx_sta, loc_sou, loc_sta, loc_path)
 
@@ -229,11 +251,12 @@ class DataTest(unittest.TestCase):
 
         info_result2 = _test_mod_read_weight_file('./tmp/result1.csv')
         test.import_time(info_result2[0], info_result2[1])
-        test.close_db()
 
         check = TestDataStore()
         num_row = check.get_num_row()
-        check.delete_and_recreate_db()
+
+        test.delete_and_recreate_db()
+        test.close_db()
         check.close_db()
         self.assertEqual(len(info_result1[0]), num_row)
 
@@ -245,20 +268,20 @@ class DataTest(unittest.TestCase):
         info_result = _test_mod_read_weight_file('./tmp/result1.csv')
         test.import_time(info_result[0], info_result[1])
 
-        time = []
+        t = []
         time_check = []
         for loc in info_result[4]:
-            time.append(test.get_time(info_result[3], loc[0:3]))
+            t.append(test.get_time(info_result[3], loc[0:3]))
             time_check.append(loc[3])
+        test.delete_and_recreate_db()
         test.close_db()
-        self.assertEqual(time, time_check)
+        self.assertEqual(t, time_check)
 
     def test_mod_with_two_tables(self):
         """ Test if two or more tables can be created in database
         """
         test = DataStore()
         check = TestDataStore()
-        check.delete_and_recreate_db()
 
         info_result1 = _test_mod_read_weight_file('./tmp/result1.csv')
         info_result2 = _test_mod_read_weight_file('./tmp/result2.csv')
@@ -275,14 +298,36 @@ class DataTest(unittest.TestCase):
         for loc in info_result2[4]:
             time2.append(test.get_time(info_result2[3], loc[0:3]))
             time2_check.append(loc[3])
-        test.close_db()
         num_row = check.get_num_row()
 
-        check.delete_and_recreate_db()
+        test.delete_and_recreate_db()
+        test.close_db()
         check.close_db()
         self.assertEqual((num_row, time1, time2), (len(info_result1[0])+len(info_result2[0])
                                                    , time1_check, time2_check))
+    """
+    def test_mod_with_cpu_time(self):
+        test = DataStore()
 
+        info_result = _test_mod_read_weight_file('./tmp/result1.csv')
+        test.import_time(info_result[0], info_result[1])
+        time_test = {}
+        for elem in range(1100000):
+            time_test[elem] = elem*0.01
+        test.import_time(time_test, info_result[1])
+        test.copy_table(223, info_result[1])
+        test.copy_table(228, info_result[1])
+
+        time_start = time.time()
+        for que in range(200000):
+            test.get_time(info_result[3], info_result[4][0][0:3])
+        time_end = time.time()
+
+        test.delete_and_recreate_db()
+        test.close_db()
+        print((time_end-time_start)/200000)
+        self.assertEqual(1, 1)
+    """
 
 def main():
     """ unit test
