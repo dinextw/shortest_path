@@ -99,7 +99,7 @@ class ShortestPath(object):
                     data[0], data[1], data[2])
                 out_file.write('%s\n' % tmp)
 
-    def get_weight(self):
+    def get_weight_list(self):
         """ Return the weight dictionary of every vertexes in graph
         Args:
         Returns:
@@ -108,14 +108,17 @@ class ShortestPath(object):
             Native exceptions.
         """
         idx_weight = {}
+        loc_sta = self._norm.recover_norm_loc(self._idx_vertex['2'][0], 2)
         for weight, idx in zip(self._result['2']['total_shortest_vertex_weight']
                                , self._idx_vertex['2']):
-            if idx == self._idx_vertex['2'][0] or idx == self._idx_vertex['2'][-1]:
+            if idx == self._idx_vertex['2'][0] or idx == self._idx_vertex['2'][-1] or idx % 4 == 0:
                 loc = self._norm.recover_norm_loc(idx, 2)
-                idx_weight[self._norm.get_norm_index(loc, 1)] = float(weight)
-            elif idx % 4 == 0:
-                loc = self._norm.recover_norm_loc(idx, 2)
-                idx_weight[self._norm.get_norm_index(loc, 1)] = float(weight)
+                if((abs(loc[0]-loc_sta[0]) < 0.5 and abs(loc[1]-loc_sta[1]) < 0.5
+                        and abs(loc[2]-loc_sta[2]) < 50)):
+                    if idx_weight.get(self._norm.get_norm_index(loc, 1)) is None:
+                        idx_weight[self._norm.get_norm_index(loc, 1)] = float(weight)
+                    elif idx_weight[self._norm.get_norm_index(loc, 1)] > float(weight):
+                        idx_weight[self._norm.get_norm_index(loc, 1)] = float(weight)
         return idx_weight
 
 class ShortestPathTest(unittest.TestCase):
@@ -155,11 +158,24 @@ class ShortestPathTest(unittest.TestCase):
         loc_sta = [120, 23, 0]
         loc_sou = [120.01, 23.01, 1]
         short.execute_dijk(loc_sta, loc_sou)
-        weights = short.get_weight()
-        self.assertEqual(weights[norm.get_norm_index(loc_sta, 2)], 0)
+        weights = short.get_weight_list()
+        self.assertEqual(weights[norm.get_norm_index(loc_sta, 1)], 0)
+
+    def test_mod_with_weight_list_bound(self):
+        """ Test if weight list boundary works
+        """
+        settings = {'extra_range':[0, 0, 0], 'ranges':[0.01, 0.01, 1]
+                                                      , 'path_model':'./_input/MOD_H13_uniform'}
+        short = ShortestPath(settings)
+        norm = normgrid.NormGrid()
+        loc_sta = [120, 23, 0]
+        loc_sou = [120.52, 23.01, 1]
+        short.execute_dijk(loc_sta, loc_sou)
+        weights = short.get_weight_list()
+        self.assertEqual(weights.get(norm.get_norm_index(loc_sou, 1)), None)
 
     def test_mod_with_real_case(self):
-        """ Test with TAIGER case
+        """ Test with TAIGER cases
         """
         short = ShortestPath()
         loc_sou = [121.037670, 24.79534, -0.055000]
